@@ -1,0 +1,92 @@
+﻿import Orange
+import numpy as np
+from numpy.linalg import norm
+import itertools
+
+
+# threshold on mCerulean for the cell to be considered a knock-out
+ko_threshold = 20.0
+
+# threshold on GtaCGFP for the cell to be considered a knock-out
+oe_threshold = 20.0
+
+# number of random pairs to estimate the distance
+n_pairs = 10000
+
+# distance could be either euclidean or cosine (this is similarity)
+euclidean = True
+
+
+def average(x):
+    return np.sum(x) / len(x)
+
+
+def paired_distances(ds, samples=1000):
+    X = ds.X
+    m = len(ds)
+    dist = []
+    for _ in range(samples):
+        i1, i2 = np.random.choice(m, 2, replace=False)
+        if euclidean:
+            d = np.sqrt(np.sum((X[i1] - X[i2])**2))
+        else:
+            d = X[i1].dot(X[i2]) / (norm(X[i1]) * norm(X[i2]))
+        dist.append(d)
+    return average(dist), np.array(dist)
+
+
+def check_data(data):
+    if data is None:
+        print("No data on input. Connect File widget to Python Script.")
+        return False
+
+    att_names = set([a.name for a in data.domain.metas])
+    for req_f in ["mCerulean", "GtaCGFP"]:
+        if req_f not in att_names:
+            print("%s should be in meta features.\n" % req_f)
+            print("Use Select Columns to include it, or edit the input file.")
+            return False
+
+    return True
+
+data = None
+if "in_data" in locals():
+    data = in_data
+else:
+    import os.path
+    from Orange.data import Table
+    test_data = "../dispersion/data/dispersion-filtered-reduced.pkl"
+    if os.path.exists(test_data):
+        data = Orange.data.Table(test_data)
+
+if check_data(data):
+    ko = np.array([d["mCerulean"] > ko_threshold for d in data])
+    oe = np.array([d["GtaCGFP"] > oe_threshold for d in data])
+    print("Knock-outs: %d, Overexpressed: %d, Overlap: %d" % (sum(ko), sum(oe), sum(ko & oe)))
+
+    ko_data = data[ko]
+    oe_data = data[oe]
+    all_data = data[ko | oe]
+
+    all_data.name, ko_data.name, oe_data.name = "all", "ko", "oe"
+
+    print("Estimating pairwise distances")
+    datasets = [all_data, ko_data, oe_data]
+    distances = []
+    for i, sample in enumerate(datasets):
+        a, dist = paired_distances(sample, n_pairs)
+        distances.extend(dist)
+        print("%s (%d): %.3f" % (sample.name, len(sample), a))
+    distances = np.array(distances)
+
+    # reporting
+    cls = np.array(list(itertools.chain(*[[ds.name]*n_pairs for ds in datasets])))
+    cls_names = [ds.name for ds in datasets]
+
+    domain = Orange.data.Domain(
+        [Orange.data.ContinuousVariable("dist")],
+        [Orange.data.DiscreteVariable("type", cls_names)],
+        None
+    )
+    D = [[d, c] for d, c in zip(distances, cls)]
+    out_data = Orange.data.Table(domain, D)

@@ -1,0 +1,77 @@
+import numpy as np
+from matplotlib import pyplot as plt
+import seaborn as sns
+from collections import OrderedDict
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.manifold import MDS
+from os.path import expanduser
+
+output_file_name = "trajectories.pdf"
+display_legend = True
+
+# either PCA or MDS
+projection_method = "PCA"
+
+# coordinates could be any name of the column - say, "Time", or a number
+# example: ["Time", 2]
+coordinates = [1, 2]
+
+
+if "_script" in globals():
+    data = in_data
+else:
+    import Orange
+    data = Orange.data.Table("../trajectories/tgrtagdata.pkl")
+
+
+def plot_labels(xs, ys, vs, ax, off=0.013):
+    x_offset = (max(xs) - min(xs)) * off
+    y_offset = (max(ys) - min(ys)) * off
+
+    for x, y, v in zip(xs, ys, vs):
+        ax.text(x + x_offset, y - 2 * y_offset, v)
+
+
+def get_data(c, proj, data):
+    if type(c) == int:
+        return proj[:, c - 1]
+    else:
+        att_names = set([str(a) for a in data.domain.attributes + data.domain.metas])
+        if c in att_names:
+            return np.array([float(d[c]) for d in data])
+        else:
+            print("Wrong coordinate specification, %s not valid name for a column" % c)
+
+
+def get_axis_labels():
+    s = ["%s #%d" % (projection_method, c) if type(c) == int else c for c in coordinates]
+    return s
+
+
+X = StandardScaler().fit_transform(data.X)  # scale the data
+model = MDS(n_components=5) if projection_method == "MDS" else PCA(n_components=5)
+proj = model.fit_transform(X)
+
+plt.close()
+sns.set("talk")
+sns.set(rc={'figure.figsize': (11.7, 8.27)})
+sns.set_style("ticks")
+sns.set_palette("pastel")
+cls = [str(d.get_class()) for d in data]
+
+# xs, ys = proj[:, 0], proj[:, 1]
+xs, ys = [get_data(c, proj, data) for c in coordinates]
+axis_labels = get_axis_labels()
+
+labels = ["%d" % int(d["Time"]) for d in data]
+plot_labels(xs, ys, labels, plt.gca())
+for v in list(OrderedDict.fromkeys(cls)):
+    a = np.array(sorted([(int(t), x, y) for x, y, t, c in zip(xs, ys, labels, cls) if c == v]))
+    sns.scatterplot(a[:, 1], a[:, 2], s=200, label=v)
+    plt.plot(a[:, 1], a[:, 2], linewidth=5, zorder=-2)
+plt.legend()
+plt.xlabel(axis_labels[0])
+plt.ylabel(axis_labels[1])
+plt.savefig(expanduser("~/Desktop/") + output_file_name)
+print("Done. Check out the file %s on your desktop." % output_file_name)

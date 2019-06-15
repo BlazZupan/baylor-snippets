@@ -1,0 +1,39 @@
+import Orange
+import itertools
+import numpy as np
+
+flatten = lambda lst: list(itertools.chain(*lst))
+
+
+def nans(k):
+    a = np.zeros(k)
+    a[:] = np.nan
+    return a
+
+
+data = in_data
+
+times = list({int(d["Time"]) for d in data})
+strains = list({str(d["Source ID"]) for d in data})
+st2indx = {(str(d["Source ID"]), int(d["Time"])): i for i, d in enumerate(data)}
+
+info = [[("%s-%d" % (str(a), t), t, a.attributes.get("Entrez ID", None))
+         for a in data.domain.attributes] for t in times]
+info = flatten(info)
+
+domain = Orange.data.Domain([
+    Orange.data.ContinuousVariable(name)
+    for name, _, _ in info], data.domain.class_var, None
+)
+for i, (_, t, e) in enumerate(info):
+    domain.attributes[i].attributes = {"Entrez ID": e, "t": t}
+
+X = data.X
+Z = np.array([np.array(flatten([X[st2indx[(s, t)]]
+                                if ((s, t) in st2indx)
+                                else np.empty(len(data.domain.attributes))
+                                for t in times]))
+              for s in strains])
+
+ci = [data.domain.class_var.values.index(s) for s in strains]
+out_data = Orange.data.Table.from_numpy(domain, Z, np.array(ci))
