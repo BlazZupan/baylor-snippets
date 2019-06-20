@@ -16,9 +16,10 @@ else:
 
     data_dir = in_data.domain['image'].attributes['origin']
 
-    for category in in_data.domain['category'].values:
-        cat_dir = os.path.join(save_dir, category)
-        os.mkdir(cat_dir)
+    if in_data.domain.has_discrete_class:
+        for category in in_data.domain.class_var.values:
+            cat_dir = os.path.join(save_dir, str(category))
+            os.mkdir(cat_dir)
 
     for entry in in_data:
         local_dir = str(entry['image'])
